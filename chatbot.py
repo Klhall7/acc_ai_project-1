@@ -1,47 +1,153 @@
 from dotenv import load_dotenv
 from openai import OpenAI
-import os, json, geocoder, requests
+import os, json, geocoder, requests, wolframalpha
 
 load_dotenv("openai_api_key.env", "newsdata_api_key.env", "openweathermap_api_key.env, wolframllm_appid_key.env")
 
 
 print(os.getenv("OPENAI_API_KEY"))
+print(os.getenv("NEWSDATA_API_KEY"))
+print(os.getenv("GEOCODE_API_KEY"))
+print(os.getenv("OPENWEATHERMAP_API_KEY"))
+print(os.getenv("WOLFRAMLLM_APPID_KEY"))
+
+
+#define tools in Class object
+class ChatbotTools:
+    def __init__(self):
+        # Initialize tool API keys 
+        self.openweather_api_key = os.getenv('OPENWEATHERMAP_API_KEY')
+        self.geocode_api_key = os.getenv('GEOCODE_API_KEY')
+        self.newsdata_api_key = os.getenv('NEWSDATA_API_KEY')
+        self.wolfram_app_id = os.getenv('WOLFRAMLLM_APPID_KEY')
+        
+        # Initialize Wolfram Alpha client
+        self.wolfram_client = wolframalpha.Client(self.wolfram_app_id)
+        
+        # URLs for each tool API
+        self.geocode_base_url = "http://api.openweathermap.org/geo/1.0/direct"
+        self.weather_base_url = "https://api.openweathermap.org/data/2.5/weather"
+        self.news_base_url = "https://newsapi.org/v2/top-headlines"
+        self.wolfram_base_url="https://www.wolframalpha.com/api/v1/llm-api"
+
+        
+    def get_coordinates(self, location: str, limit: int = 1) -> dict:
+        """
+        Get latitude and longitude codes for a given location using geocoder API. This will be used to get current weather. limited to one response
+        """
+        
+        params = {
+            'q': location,
+            'limit': limit,
+            'appid': self.openweather_api_key
+        }
+        
+        try:
+            response = requests.get(self.geocode_base_url, params=params)
+            response.raise_for_status()
+            
+            results = response.json()
+            
+            if not results:
+                return {"error": f"No coordinates found for {location}"}
+            
+            # Take the first result
+            first_result = results[0]
+            return {
+                "latitude": first_result['lat'],
+                "longitude": first_result['lon'],
+                "location_name": first_result['name'],
+                "country": first_result.get('country', 'Unknown'),
+                "state": first_result.get('state', '')
+            }
+        
+        except requests.RequestException as e:
+            return {"error": f"Geocoding API error: {str(e)}"}
+        
+
+    def get_weather(self, location: str) -> str:
+        """get current weather updates from Weather Map API using coordinates from geocoder api."""
+        
+        # Get coordinates using Geocoding API and check for errors
+        coords = self.get_coordinates(location)
+        
+        params = {
+            "lat": coords["latitude"],
+            "lon": coords["longitude"],
+            "appid": self.openweather_api_key,
+            "units": units
+        }
+        
+        try:
+            response = requests.get(self.weather_base_url, params=params)
+            response.raise_for_status()
+            weather_data = response.json()
+            
+            # Determine temperature unit symbol
+            temp_unit = "°F" if units == "imperial" else "°C"
+            
+            # organize and return weather information
+            return (f"Weather in {coords.get('location_name', location)}, "
+                    f"{coords.get('country', '')}: "
+                    f"Temperature: {weather_data['main']['temp']}{temp_unit}, "
+                    f"Feels like: {weather_data['main']['feels_like']}{temp_unit}. "
+                    f"Conditions: {weather_data['weather'][0]['description']}. "
+                    f"Humidity: {weather_data['main']['humidity']}%. "
+                    f"Wind Speed: {weather_data['wind']['speed']} {'mph' if units == 'imperial' else 'm/s'}.")
+        
+        except requests.RequestException as e:
+            return f"Could not retrieve weather for {location}. Error: {str(e)}"
+
+    def get_news(self, category: str = "technology", country: str = "us") -> str:
+        """Retrieve latest news based on category and country."""
+        params = {
+            "category": category,
+            "country": country,
+            "apiKey": self.newsdata_api_key
+        }
+        
+        try:
+            response = requests.get(self.news_base_url, params=params)
+            response.raise_for_status()
+            news_data = response.json()
+            
+            headlines = [article['title'] for article in news_data['articles'][:3]]
+            return "Top Headlines: " + "; ".join(headlines)
+        except requests.RequestException:
+            return "Could not retrieve news at this time."
+
+    def wolfram_query(self, query: str, maxchars: int = 500) -> str:
+        """query Wolfram Alpha's LLM API."""
+        params = {
+            "input": query, #user input
+            "appid": self.wolfram_app_id,
+            "maxchars": maxchars,
+        }
+        try:
+            response = requests.get(self.wolfram_base_url, params=params)
+            
+            for pod in response.pods:
+                if pod.title == 'Result' or pod.title == 'Numerical result':
+                    return f"Result for '{query}': {pod.text}"
+            
+            return f"No result found for '{query}'"
+        except Exception:
+            return f"Could not process query: {query}"
 
 #set up connection to Open AI's API using key in environment file
 client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
-
-#user prompt for speaking to chatbot
-
 
 # Create a list of messages to send to the API
 message_list = [
     {
         "role": "system", 
-        "content": "You are an assistant used for three main functions: weather reporting by a given location, currency conversion between two currencies, and translating given text into a specified language."
-        #may specify to have user select function first, ie. what would you like to do today?: 1,2, or 3"
+        "content": "You are an assistant used for three main functions: current weather reporting by a given location, current news for a given location and category, and passing a question to a wolfram alpha llm."
     },
     
 ]
 
-#tool function definitions
-#return simulated weather data temp and condition description with given location, ##celsius and fahrenheit
-def get_weather(location:str):
-    return f"The current weather in {location} is 80 degrees fahrenheit/35 degrees celsius. Throughout the day you should expect moderate winds. Please continue to check the report as conditions may change"
-
-#return converted currency given a float number amount with currency type, and desired currency type
-def convert_currency(amount:str, from_currency:str, to_currency:str):
-    return f"{amount, from_currency} is equal to 12 {to_currency}."
-
-#return translation given text and desired language
-def translate_text(text:str, target_language:str):
-    return "hola"
-
 ##variable to store available tools/functions to navigate response with error handling
-available_tools = {
-    "get_weather": get_weather,
-    "convert_currency": convert_currency,
-    "translate_text": translate_text
-}
+available_tools = ChatbotTools
 
 #set up tools dictionary schema with example descriptions for API chatbot
 tools = [
@@ -65,8 +171,8 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "convert_currency",
-            "description": "Convert a given amount from one currency to another target currency",
+            "name": "get_news",
+            "description": "give headline news for a given location and interest category",
             "parameters": {
                 "type": "object",
                 "properties": {

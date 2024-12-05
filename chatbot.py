@@ -33,7 +33,7 @@ class ChatbotTools:
         
     def get_coordinates(self, location: str, limit: int = 1) -> dict:
         """
-        Get latitude and longitude codes for a given location using geocoder API. This will be used to get current weather. limited to one response
+        Get latitude and longitude codes for a given location zip code using geocoder API. This will be used to get current weather. limited to one response
         """
         
         params = {
@@ -119,38 +119,40 @@ class ChatbotTools:
     def wolfram_query(self, query: str, maxchars: int = 500) -> str:
         """query Wolfram Alpha's LLM API."""
         params = {
-            "input": query, #user input
+            "i": query, #user input
             "appid": self.wolfram_app_id,
             "maxchars": maxchars,
         }
         try:
             response = requests.get(self.wolfram_base_url, params=params)
             
-            for pod in response.pods:
-                if pod.title == 'Result' or pod.title == 'Numerical result':
-                    return f"Result for '{query}': {pod.text}"
-            
-            return f"No result found for '{query}'"
-        except Exception:
-            return f"Could not process query: {query}"
-
+            #raise exception for errors
+            response.raise_for_status()
+            return response.text
+    
+        except requests.RequestException as e:
+            return f"Could not process wolfram query: {e}"
+        
 #set up connection to Open AI's API using key in environment file
 client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+
+# Initialize ChatbotTools
+chatbot_tools = ChatbotTools()
 
 # Create a list of messages to send to the API
 message_list = [
     {
         "role": "system", 
-        "content": "You are an assistant used for three main functions: current weather reporting by a given location, current news for a given location and category, and passing a question to a wolfram alpha llm."
+        "content": "You are an assistant used for three main functions: current weather reporting by a given location, current news for a given location and category, and passing a factual question to a wolfram alpha llm."
     },
     
 ]
 
 ##variable to store available tools/functions to navigate response with error handling
-available_tools = ChatbotTools
+available_tools = ChatbotTools()
 
 #set up tools dictionary schema with example descriptions for API chatbot
-tools = [
+tools_dict= [
     {
         "type": "function",
         "function": {
@@ -176,20 +178,16 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "amount": {
+                    "category": {
                         "type": "string",
-                        "description": "The amount to convert"
+                        "description": "News category (e.g., technology, sports, business)"
                     },
-                    "from_currency": {
+                    "country": {
                         "type": "string",
-                        "description": "The currency to convert from"
-                    },
-                    "to_currency": {
-                        "type": "string",
-                        "description": "The currency to convert to"
+                        "description": "Two-letter country code (e.g., us, gb, ca)"
                     }
                 },
-                "required": ["amount", "from_currency", "to_currency"]
+                "required": []
             }
         }
     },
@@ -197,37 +195,22 @@ tools = [
         "type": "function",
         "function": {
             "name": "translate_text",
-            "description": "Translate text to a target language",
+            "description": "Execute computational or factual query",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "text": {
+                    "query": {
                         "type": "string",
-                        "description": "The text to translate"
-                    },
-                    "target_language": {
-                        "type": "string",
-                        "description": "The language to translate to"
+                        "description": "The computational or factual query to process"
                     }
                 },
-                "required": ["text", "target_language"]
+                "required": ["query"]
             }
         }
     }
 ]
 
 
-#make api call w/ parameters
-"""
-completion = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=message_list,
-    tool_choice="auto",
-    tools=tools,
-    temperature=0.0
-)
-
-"""
 
 def process_user_input(user_input: str) -> str:
     """
@@ -242,7 +225,7 @@ def process_user_input(user_input: str) -> str:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=message_list,
-            tools=tools,
+            tools=tools_dict,
             tool_choice="auto",
             temperature=0.0
         )
@@ -267,11 +250,11 @@ def process_user_input(user_input: str) -> str:
                     function_response = available_tools[function_name](**function_args)
                     message_list.append({
                     "role":"tool",
-                    "content":function_response,
+                    "content": str(function_response),
                     "tool_call_id":tool_call.id
                 })
             
-            #make output more conversational, not just data     
+            #generate conversational output   
             completion = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=message_list,
@@ -293,8 +276,8 @@ if __name__ == "__main__":
     # Example user inputs
     test_inputs = [
         "What's the weather like in Albany, NY?",
-        "Convert 100 USD to Yen",
-        "Translate 'Hello, how are you?' to japanese" 
+        "What tech news is there in Albany, NY",
+        "What are the 10 densest elemental metals" 
     ]
     
     print("Testing...")

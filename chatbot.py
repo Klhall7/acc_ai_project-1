@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 from openai import OpenAI
-import os, json, geocoder, requests, wolframalpha
+import os, json, requests, wolframalpha
 
 load_dotenv("openai_api_key.env", "newsdata_api_key.env", "openweathermap_api_key.env, wolframllm_appid_key.env")
 
@@ -65,9 +65,9 @@ class ChatbotTools:
             return {"error": f"Geocoding API error: {str(e)}"}
         
 
-    def get_weather(self, location: str) -> str:
-        """get current weather updates from Weather Map API using coordinates from geocoder api."""
-        
+    def get_weather(self, location: str, units: str = "imperial") -> str:
+        """get current weather updates from Weather Map API using coordinates from geocoder api.Temperature default to Fahrenheit(imperial)"""
+    
         # Get coordinates using Geocoding API and check for errors
         coords = self.get_coordinates(location)
         
@@ -75,18 +75,17 @@ class ChatbotTools:
             "lat": coords["latitude"],
             "lon": coords["longitude"],
             "appid": self.openweather_api_key,
-            "units": units
+            "units": "units" 
         }
         
         try:
             response = requests.get(self.weather_base_url, params=params)
             response.raise_for_status()
             weather_data = response.json()
-            
-            # Determine temperature unit symbol
+            # Determine temperature unit based on response
             temp_unit = "°F" if units == "imperial" else "°C"
             
-            # organize and return weather information
+            # navigate and return weather information
             return (f"Weather in {coords.get('location_name', location)}, "
                     f"{coords.get('country', '')}: "
                     f"Temperature: {weather_data['main']['temp']}{temp_unit}, "

@@ -147,8 +147,12 @@ message_list = [
     
 ]
 
-##variable to store available tools/functions to navigate response with error handling
-available_tools = ChatbotTools()
+#variable to store available tools/functions 
+available_tools = {
+    "get_weather": chatbot_tools.get_weather,
+    "get_news": chatbot_tools.get_news,
+    "wolfram_query": chatbot_tools.wolfram_query
+}
 
 #set up tools dictionary schema with example descriptions for API chatbot
 tools_dict= [

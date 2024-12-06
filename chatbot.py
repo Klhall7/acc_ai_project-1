@@ -2,7 +2,10 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import os, json, requests, wolframalpha
 
-load_dotenv("openai_api_key.env", "newsdata_api_key.env", "openweathermap_api_key.env, wolframllm_appid_key.env")
+load_dotenv("openai_api_key.env")
+load_dotenv("newsdata_api_key.env")
+load_dotenv("openweathermap_api_key.env")
+load_dotenv("wolframllm_appid_key.env")
 
 
 print(os.getenv("OPENAI_API_KEY"))
@@ -75,7 +78,7 @@ class ChatbotTools:
             "lat": coords["latitude"],
             "lon": coords["longitude"],
             "appid": self.openweather_api_key,
-            "units": "units" 
+            "units": units 
         }
         
         try:

@@ -36,7 +36,12 @@ class ChatbotTools:
         
     def get_coordinates(self, location: str, limit: int = 1) -> dict:
         """
-        Get latitude and longitude codes for a given location zip code using geocoder API. This will be used to get current weather. limited to one response
+        Direct geocoder API to auto convert a given location (city name or area name) to geographical coordinates (latitude and longitude) needed for the Weather Map API. Number of responses is limited to one by default for simplicity. Includes message for error handling.
+        Params/Args: 
+            q (query location): expects string value; City name, state code (only for the US) and country code divided by comma. Prefers ISO 3166 country codes.
+            limit: expects integer value; optional parameter for the number of the locations in the API response (max 5). defaulted to one. 
+            appid: unique API key required to access information;stored in .env file
+        Returns: JSON of location name, two letter codes and lat lon coordinates.
         """
         
         params = {
@@ -69,7 +74,15 @@ class ChatbotTools:
         
 
     def get_weather(self, location: str, units: str = "imperial") -> str:
-        """get current weather updates from Weather Map API using coordinates from geocoder api.Temperature default to Fahrenheit(imperial)"""
+        """
+        Retrieves current weather forecast based on a given location. Location (lat & lon) coordinates are retrieved using geocoder function. Includes message for error handling 
+        Parameters/Args:
+            lat: expects string; latitude for location result from get_coordinates. 
+            lon: expects string; longitude for location result from get_coordinates.
+            appid: unique API key required to access information;stored in .env file
+            units: expects string;  temperature measurement. Default set to imperial for fahrenheit.
+        Returns: dictionary containing get current weather updates. Temperature default to Fahrenheit(imperial). Json is then navigated through for a readable result
+        """
     
         # Get coordinates using Geocoding API and check for errors
         coords = self.get_coordinates(location)
@@ -101,7 +114,14 @@ class ChatbotTools:
             return f"Could not retrieve weather for {location}. Error: {str(e)}"
 
     def get_news(self, category: str = "technology", country: str = "us") -> str:
-        """Retrieve latest news based on category and country."""
+        """ 
+        Retrieves latest news based on category and country of origin. 
+        Parameters/Args:
+            category: expects string; News category. Default set to technology for now.
+            country: expects string; Country code. Default set to US for now.
+            apiKey: unique API key required to access information;stored in .env file
+        Returns: dictionary containing top headlines. JSON info is joined as a string for readability
+        """
         params = {
             "category": category,
             "country": country,
@@ -119,7 +139,13 @@ class ChatbotTools:
             return "Could not retrieve news at this time."
 
     def wolfram_query(self, query: str, maxchars: int = 500) -> str:
-        """query Wolfram Alpha's LLM API."""
+        """
+        Receives factual information from Wolfram Alpha's LLM when given an input query.Includes error handling for no result or failure in processing.
+        Parameters/Args:
+            i: expects string; user input query/ question. 
+            appid: unique API key required to access information;stored in .env file
+            maxchars: expects integer; character limit on response, set to 500 for simplicity/ time
+        Returns: readable information results from the LLM API with a link back to the full Wolfram|Alpha website results."""
         params = {
             "i": query, #user input
             "appid": self.wolfram_app_id,
@@ -220,7 +246,7 @@ tools_dict= [
 
 def process_user_input(user_input: str) -> str:
     """
-    Process user input and return appropriate response using tool calls.
+    Processes user input through Open AI's chatbot model and returns appropriate response using appropriate tool calls as needed. Responses are appended and prompt loops for conversational feel.
     """
     try:
         message_list.append({

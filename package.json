@@ -1,0 +1,5 @@
+{
+  "optionalDependencies": {
+    "win-node-env": "^0.6.1"
+  }
+}

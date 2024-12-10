@@ -259,7 +259,7 @@ tools_dict= [
 
 def process_user_input(user_input: str) -> str:
     """
-    Processes user input through Open AI's chatbot model and returns appropriate response using appropriate tool calls as needed. Responses are appended and prompt loops for conversational feel.
+    Processes user input through Open AI's chatbot model and returns appropriate response using appropriate tool calls as needed. Responses are appended and prompt loops for conversational feel. Added argument parsing and detailed error messages for debugging
     """
     try:
         message_list.append({
@@ -385,7 +385,7 @@ def process_user_input(user_input: str) -> str:
 if __name__ == "__main__":
     # Example user inputs
     test_inputs = [
-        "What's the weather like in Albany, NY?",
+        "What's the weather like in New York?",
         "What tech news is there in Albany, NY",
         "What are the 10 densest elemental metals" 
     ]

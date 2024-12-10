@@ -57,7 +57,7 @@ class ChatbotTools:
             results = response.json()
             
             if not results:
-                return {"error": f"No coordinates found for {location}"}
+                return {f"error {str(e)}": f"No coordinates found for {location}"}
             
             # Take the first result
             first_result = results[0]
@@ -87,8 +87,21 @@ class ChatbotTools:
         # Get coordinates using Geocoding API and check for errors
         coords = self.get_coordinates(location)
         
+        #extra debug check
+        if not isinstance(coords, dict):
+            return f"Invalid coordinates response for {location}."
+        
+        if "error" in coords:
+            return coords["error"]
+        
+        # ensure latitude and longitude keys exist
+        if "latitude" not in coords or "longitude" not in coords:
+            return f"Could not retrieve coordinates for {location}. Please check the location name."
+        
+        
+        #retrieve lat and lon keys directly
         params = {
-            "lat": coords["latitude"],
+            "lat": coords["latitude"], 
             "lon": coords["longitude"],
             "appid": self.openweather_api_key,
             "units": units 
@@ -98,7 +111,7 @@ class ChatbotTools:
             response = requests.get(self.weather_base_url, params=params)
             response.raise_for_status()
             weather_data = response.json()
-            # Determine temperature unit based on response
+            #Determine temperature unit based on response
             temp_unit = "°F" if units == "imperial" else "°C"
             
             # navigate and return weather information
@@ -109,9 +122,9 @@ class ChatbotTools:
                     f"Conditions: {weather_data['weather'][0]['description']}. "
                     f"Humidity: {weather_data['main']['humidity']}%. "
                     f"Wind Speed: {weather_data['wind']['speed']} {'mph' if units == 'imperial' else 'm/s'}.")
-        
-        except requests.RequestException as e:
-            return f"Could not retrieve weather for {location}. Error: {str(e)}"
+            
+        except Exception as e:
+            return f"Error retrieving weather for {location}: {str(e)}"
 
     def get_news(self, category: str = "technology", country: str = "us") -> str:
         """ 
@@ -135,8 +148,8 @@ class ChatbotTools:
             
             headlines = [article['title'] for article in news_data['articles'][:3]]
             return "Top Headlines: " + "; ".join(headlines)
-        except requests.RequestException:
-            return "Could not retrieve news at this time."
+        except requests.RequestException as e:
+            return f"Could not retrieve {category} news for {country}. Error: {str(e)}"
 
     def wolfram_query(self, query: str, maxchars: int = 500) -> str:
         """
@@ -254,20 +267,82 @@ def process_user_input(user_input: str) -> str:
             "content":user_input,
         })
         # Create chat completion with tool calls
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=message_list,
-            tools=tools_dict,
-            tool_choice="auto",
-            temperature=0.0
-        )
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=message_list,
+                tools=tools_dict,
+                tool_choice="auto",
+                temperature=0.0
+            )
+        except Exception as api_error:
+            return f"OpenAI API Error: {str(api_error)}"
+        
         message_list.append(
             response.choices[0].message
         )
 
         # navigate message content
         response_message = response.choices[0].message
+        
+        # Check if the model wants to call a function
+        if response_message.tool_calls:
+            # Process each tool call
+            for tool_call in response_message.tool_calls:
+                function_name = tool_call.function.name
+                
+                try:
+                    # Parse arguments safely
+                    function_args = json.loads(tool_call.function.arguments)
+                except json.JSONDecodeError:
+                    return f"Error: Invalid JSON arguments for function {function_name}"
+                
+                # Detailed function call error handling
+                try:
+                    # Check if function exists in available tools
+                    if function_name not in available_tools:
+                        return f"Error: Function {function_name} not found in available tools"
+                    
+                    # Call function with arguments
+                    function_response = available_tools[function_name](**function_args)
+                    
+                    # Append tool response to message list
+                    message_list.append({
+                        "role": "tool",
+                        "content": str(function_response),
+                        "tool_call_id": tool_call.id
+                    })
+                
+                except TypeError as type_error:
+                    return f"Error: Incorrect arguments for {function_name}. Details: {str(type_error)}"
+                except Exception as func_error:
+                    return f"Error executing {function_name}: {str(func_error)}"
+            
+            # Generate conversational output
+            try:
+                completion = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=message_list,
+                    temperature=0.0,
+                )
+                
+                message_list.append({
+                    "role": "assistant",
+                    "content": completion.choices[0].message.content,
+                })
+                
+                return completion.choices[0].message.content
+            
+            except Exception as completion_error:
+                return f"Error generating final response: {str(completion_error)}"
+        
+        else:
+            return response_message.content
 
+    except Exception as unexpected_error:
+        return f"Unexpected error processing request: {str(unexpected_error)}"
+
+        """
         # Check if the model wants to call a function
         if response_message.tool_calls:
             # Process each tool call
@@ -298,11 +373,14 @@ def process_user_input(user_input: str) -> str:
                     
                 })
             return completion.choices[0].message.content
+            
+            
         else:
             return response_message.content
 
     except Exception as e:
         return f"Error processing request: {str(e)}"
+        """
 
 if __name__ == "__main__":
     # Example user inputs

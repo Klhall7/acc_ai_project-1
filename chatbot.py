@@ -17,81 +17,21 @@ class ChatbotTools:
         self.wolfram_client = wolframalpha.Client(self.wolfram_app_id)
         
         # URLs for each tool API
-        self.geocode_base_url = "http://api.openweathermap.org/geo/1.0/direct"
         self.weather_base_url = "https://api.openweathermap.org/data/2.5/weather"
-        self.news_base_url = "https://newsapi.org/v2/top-headlines"
+        self.news_base_url = "https://newsdata.io/api/1/latest"
         self.wolfram_base_url="https://www.wolframalpha.com/api/v1/llm-api"
-
-        
-    def get_coordinates(self, location: str, limit: int = 1) -> dict:
-        """
-        Direct geocoder API to auto convert a given location (city name or area name) to geographical coordinates (latitude and longitude) needed for the Weather Map API. Number of responses is limited to one by default for simplicity. Includes message for error handling.
-        Params/Args: 
-            q (query location): expects string value; City name, state code (only for the US) and country code divided by comma. Prefers ISO 3166 country codes.
-            limit: expects integer value; optional parameter for the number of the locations in the API response (max 5). defaulted to one. 
-            appid: unique API key required to access information;stored in .env file
-        Returns: JSON of location name, two letter codes and lat lon coordinates.
-        """
-        
-        params = {
-            'q': location,
-            'limit': limit,
-            'appid': self.openweather_api_key
-        }
-        
-        try:
-            response = requests.get(self.geocode_base_url, params=params)
-            response.raise_for_status()
-            
-            results = response.json()
-            
-            if not results:
-                return {f"error {str(e)}": f"No coordinates found for {location}"}
-            
-            # Take the first result
-            first_result = results[0]
-            return {
-                "latitude": first_result['lat'],
-                "longitude": first_result['lon'],
-                "location_name": first_result['name'],
-                "country": first_result.get('country', 'Unknown'),
-                "state": first_result.get('state', '')
-            }
-        
-        except requests.RequestException as e:
-            return {"error": f"Geocoding API error: {str(e)}"}
-        
 
     def get_weather(self, location: str, units: str = "imperial") -> str:
         """
-        Retrieves current weather forecast based on a given location. Location (lat & lon) coordinates are retrieved using geocoder function. Includes message for error handling 
+        Retrieves current weather forecast based on a given geographical location. Includes message for error handling 
         Parameters/Args:
-            lat: expects string; latitude for location result from get_coordinates. 
-            lon: expects string; longitude for location result from get_coordinates.
+            location ("q"): expects string; city and state to get weather for e.g. San Francisco, California. Note the api does not like shortcodes for states ie. NY for New York
             appid: unique API key required to access information;stored in .env file
             units: expects string;  temperature measurement. Default set to imperial for fahrenheit.
         Returns: dictionary containing get current weather updates. Temperature default to Fahrenheit(imperial). Json is then navigated through for a readable result
         """
-    
-        # Get coordinates using Geocoding API and check for errors
-        coords = self.get_coordinates(location)
-        
-        #extra debug check
-        if not isinstance(coords, dict):
-            return f"Invalid coordinates response for {location}."
-        
-        if "error" in coords:
-            return coords["error"]
-        
-        # ensure latitude and longitude keys exist
-        if "latitude" not in coords or "longitude" not in coords:
-            return f"Could not retrieve coordinates for {location}. Please check the location name."
-        
-        
-        #retrieve lat and lon keys directly
         params = {
-            "lat": coords["latitude"], 
-            "lon": coords["longitude"],
+            "q": location, 
             "appid": self.openweather_api_key,
             "units": units 
         }
@@ -100,34 +40,28 @@ class ChatbotTools:
             response = requests.get(self.weather_base_url, params=params)
             response.raise_for_status()
             weather_data = response.json()
-            #Determine temperature unit based on response
-            temp_unit = "°F" if units == "imperial" else "°C"
             
-            # navigate and return weather information
-            return (f"Weather in {coords.get('location_name', location)}, "
-                    f"{coords.get('country', '')}: "
-                    f"Temperature: {weather_data['main']['temp']}{temp_unit}, "
-                    f"Feels like: {weather_data['main']['feels_like']}{temp_unit}. "
-                    f"Conditions: {weather_data['weather'][0]['description']}. "
-                    f"Humidity: {weather_data['main']['humidity']}%. "
-                    f"Wind Speed: {weather_data['wind']['speed']} {'mph' if units == 'imperial' else 'm/s'}.")
+            #have AI read through data and choose a response 
+            return weather_data
             
         except Exception as e:
             return f"Error retrieving weather for {location}: {str(e)}"
 
-    def get_news(self, category: str = "technology", country: str = "us") -> str:
+    def get_news(self, category: str , country: str = "us", size = 5) -> str:
         """ 
-        Retrieves latest news based on category and country of origin. 
+        Retrieves latest news based on category and location. 
         Parameters/Args:
             category: expects string; News category. Default set to technology for now.
-            country: expects string; Country code. Default set to US for now.
+            country: expects string; Country code. Default set to US.
             apiKey: unique API key required to access information;stored in .env file
+            size: number of articles in response, limited to 10 for free tier
         Returns: dictionary containing top headlines. JSON info is joined as a string for readability
         """
         params = {
+            "apiKey": self.newsdata_api_key,
             "category": category,
             "country": country,
-            "apiKey": self.newsdata_api_key
+            "size": size,
         }
         
         try:
@@ -135,14 +69,14 @@ class ChatbotTools:
             response.raise_for_status()
             news_data = response.json()
             
-            headlines = [article['title'] for article in news_data['articles'][:3]]
-            return "Top Headlines: " + "; ".join(headlines)
+            return news_data
+        
         except requests.RequestException as e:
-            return f"Could not retrieve {category} news for {country}. Error: {str(e)}"
+            return f"Could not retrieve {category} news. Error: {str(e)}"
 
     def wolfram_query(self, query: str, maxchars: int = 500) -> str:
         """
-        Receives factual information from Wolfram Alpha's LLM when given an input query.Includes error handling for no result or failure in processing.
+        Receives factual information from Wolfram Alpha's LLM when given an input query. Includes error handling for no result or failure in processing.
         Parameters/Args:
             i: expects string; user input query/ question. 
             appid: unique API key required to access information;stored in .env file
@@ -173,7 +107,7 @@ chatbot_tools = ChatbotTools()
 message_list = [
     {
         "role": "system", 
-        "content": "You are an assistant used for three main functions: current weather reporting by a given location, current news for a given location and category, and passing a factual question to a wolfram alpha llm."
+        "content": "You are an assistant used for three main functions: current weather reporting by a given location, current news for a given region and optional category, and passing a factual question to a wolfram alpha llm."
     },
     
 ]
@@ -197,7 +131,7 @@ tools_dict= [
                 "properties": {
                     "location": {
                         "type": "string",
-                        "description": "The city and state to get weather for e.g. San Francisco, CA"
+                        "description": "The city and state to get weather for e.g. San Francisco, California. State must be written out"
                     },
                 },
                 "required": ["location"]
@@ -214,7 +148,7 @@ tools_dict= [
                 "properties": {
                     "category": {
                         "type": "string",
-                        "description": "News category (e.g., technology, sports, business)"
+                        "description": "news articles for a specific category (e.g., technology, sports, business)"
                     },
                     "country": {
                         "type": "string",
@@ -228,7 +162,7 @@ tools_dict= [
     {
         "type": "function",
         "function": {
-            "name": "translate_text",
+            "name": "wolfram_query",
             "description": "Execute computational or factual query",
             "parameters": {
                 "type": "object",
@@ -331,52 +265,12 @@ def process_user_input(user_input: str) -> str:
     except Exception as unexpected_error:
         return f"Unexpected error processing request: {str(unexpected_error)}"
 
-        """
-        # Check if the model wants to call a function
-        if response_message.tool_calls:
-            # Process each tool call
-            final_response = []
-            for tool_call in response_message.tool_calls:
-                function_name = tool_call.function.name
-                function_args = json.loads(tool_call.function.arguments)
-                
-                
-                # function call with formatted response
-                if function_name in available_tools:
-                    function_response = available_tools[function_name](**function_args)
-                    message_list.append({
-                    "role":"tool",
-                    "content": str(function_response),
-                    "tool_call_id":tool_call.id
-                })
-            
-            #generate conversational output   
-            completion = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=message_list,
-            temperature=0.0,
-            )
-            message_list.append({
-                    "role":"assistant",
-                    "content":completion.choices[0].message.content,
-                    
-                })
-            return completion.choices[0].message.content
-            
-            
-        else:
-            return response_message.content
-
-    except Exception as e:
-        return f"Error processing request: {str(e)}"
-        """
-
 if __name__ == "__main__":
     # Example user inputs
     test_inputs = [
         "What's the weather like in Albany, New York?",
-        "What tech news is there in Albany, NY",
-        "What are the 10 densest elemental metals" 
+        "Top technology news",
+        "10 densest elemental metals" 
     ]
     
     print("Testing...")

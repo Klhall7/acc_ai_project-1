@@ -2,18 +2,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import os, json, requests, wolframalpha
 
-load_dotenv("openai_api_key.env")
-load_dotenv("newsdata_api_key.env")
-load_dotenv("openweathermap_api_key.env")
-load_dotenv("wolframllm_appid_key.env")
-
-
-print(os.getenv("OPENAI_API_KEY"))
-print(os.getenv("NEWSDATA_API_KEY"))
-print(os.getenv("GEOCODE_API_KEY"))
-print(os.getenv("OPENWEATHERMAP_API_KEY"))
-print(os.getenv("WOLFRAMLLM_APPID_KEY"))
-
+load_dotenv("api_keys.env")
 
 #define tools in Class object
 class ChatbotTools:
@@ -385,7 +374,7 @@ def process_user_input(user_input: str) -> str:
 if __name__ == "__main__":
     # Example user inputs
     test_inputs = [
-        "What's the weather like in New York?",
+        "What's the weather like in Albany, New York?",
         "What tech news is there in Albany, NY",
         "What are the 10 densest elemental metals" 
     ]
